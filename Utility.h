@@ -68,6 +68,13 @@ inline uint16_t getRandomAddressForNetwork() {
 
 
 class ReceiverUtility {
+  RF24NetworkHeader header;
+  RF24Network network_;
+  MessageHelper message_;
+
+ public:
+  ReceiverUtility(RF24Network &network, MessageHelper &message);
+  void receiveMessage();
 
 };
 
