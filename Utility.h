@@ -7,6 +7,8 @@
 
 #include <Arduino.h>
 
+#include "RF24Network.h"
+#include "Message.h"
 /*
  * return a adress compatible with the RF24Network
  * addressing format, a octal number where the maximum is
@@ -65,7 +67,7 @@ inline uint16_t getRandomAddressForNetwork() {
 }
 
 
-class Utility {
+class ReceiverUtility {
 
 };
 
