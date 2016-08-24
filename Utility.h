@@ -83,7 +83,7 @@ inline uint16_t getRandomAddressForNetwork() {
  */
 #define MAX_RECEIVER 2
 #define MAX_RETRY 2
-#define MIN_WAIT_TIME 1000
+#define MIN_WAIT_TIME 4000
 
 class Sensor;
 
@@ -115,7 +115,7 @@ class Sensor {
   const Sensor_type sensorType_;
   SensorMessageHelper *messagehelper_;
   const Sensor_information_type sensorInformationType_;
-  const Leds *leds_;
+  Leds *leds_;
 
   Sensor * myreceiver[MAX_RECEIVER]; //use vector for a dynamic number of receiver
 

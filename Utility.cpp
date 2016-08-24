@@ -75,7 +75,12 @@ bool SensorMessageHelper::sendMessage(const Sensor * const & sensor, uint16_t to
   RF24NetworkHeader header(to_node, MESSAGE_HEADER_TYPE);
   header.from_node = sensor->getSensorAddress();
   lastHeader = header;
-  return network_.write(header, &message_.internalMessage_, sizeof(Message));
+  #if defined(SERIAL_DEBUG)
+    Serial.println(F("Sending message with header:"));
+    Serial.print(lastHeader.toString());
+    delay(1000);
+  #endif
+  return network_.write(lastHeader, &message_.internalMessage_, sizeof(Message));
 }
 
 bool SensorMessageHelper::sendAck(const Sensor * const & sensor) {
@@ -112,27 +117,56 @@ Sensor_information_type Sensor::getSensorInformationType() const {
 }
 
 bool Sensor::sendMessage() {
-  leds_->ledWhiteOn();
-  unsigned long sendAgain = 0;
+  unsigned long sendAgain = millis() + MIN_WAIT_TIME;
   bool ans = false;
   uint8_t retry = 0;
   for (int i = 0; i < MAX_RECEIVER; i++) {
+    leds_->ledGreenLongBlink();
+
+    if(myreceiver[i] == NULL) continue;
     while (!ans && retry < MAX_RETRY) {
+      #if defined(SERIAL_DEBUG)
+        Serial.print(F("trying to send hearbeat to "));
+        Serial.print(myreceiver[i]->getSensorAddress(), OCT);
+        Serial.print(F(" i have this address: "));
+        Serial.print(address_, OCT);
+      Serial.print(F(" retry: "));
+      Serial.println(retry);
+      delay(2000);
+      #endif
       if (messagehelper_->sendMessage(this, myreceiver[i]->getSensorAddress())) {
-        leds_->ledWhiteBlink();
+        leds_->ledWhiteLongBlink();
         //wait ACK
-        while (sendAgain > millis() && !ans) {
+        while (millis() < sendAgain && !ans) {
           messagehelper_->updateNetwork();
           ans = messagehelper_->receiveMessage();
-          #ifdef SERIAL_DEBUG_MESSAGE_HELPER
+          #if defined(SERIAL_DEBUG)
           if(ans) {
-            Serial.println("HEART BEAT ANSWERED");
-            Serial.println(dispatcher.getMessage().toString());
+            Serial.println(F("HEART BEAT ANSWERED"));
+            Serial.println(messagehelper_->getMessage().toString());
+          }
+          else {
+            Serial.println(F("NO ANSWER"));
+
           }
           #endif
         }
         sendAgain = millis() + MIN_WAIT_TIME;
-        if (!ans) ++retry;
+        if (!ans) retry++;
+
+        #if defined(SERIAL_DEBUG)
+        Serial.println(F("NEW RETRY!!"));
+        delay(2000);
+        #endif
+      }
+      else {
+        #if defined(SERIAL_DEBUG)
+        Serial.println(F("SENDFAIL!!!"));
+        delay(2000);
+        #endif
+        leds_->ledRedThreeLongBlink();
+        leds_->ledRedOn();
+        retry++;
       }
     }
     if(ans) {
@@ -234,7 +268,8 @@ MotionSensor::MotionSensor(uint16_t const address,
                                    S_MOTION,
                                    V_MOTION,
                                    sensorMessageHelper,
-                                   leds) { }
+                                   leds) {
+}
 
 bool MotionSensor::sensorPresentationReceived() {
   return false;
