@@ -90,7 +90,7 @@ inline uint16_t getRandomAddressForNetwork() {
 class Sensor;
 
 class SensorMessageHelper {
-  RF24Network network_;
+  RF24Network *network_;
   MessageHelper message_;
   RF24NetworkHeader lastHeader;
  public:
@@ -120,8 +120,8 @@ class Sensor {
   Leds *leds_;
 
   Sensor * myreceiver[MAX_RECEIVER]; //use vector for a dynamic number of receiver
-  static Sensor *getSensorObj(Sensor_type type, MessageHelper &message);
  public:
+  static Sensor *getSensorObj(Sensor_type type, MessageHelper &message);
   Sensor(uint16_t const address,
          uint8_t const id,
          Sensor_type const type,

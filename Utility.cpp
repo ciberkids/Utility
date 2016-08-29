@@ -8,7 +8,7 @@
 #include "Message.h"
 
 
-SensorMessageHelper::SensorMessageHelper(RF24Network &network) : network_(network)
+SensorMessageHelper::SensorMessageHelper(RF24Network &network) : network_(&network)
     {
 
     }
@@ -16,9 +16,9 @@ SensorMessageHelper::SensorMessageHelper(RF24Network &network) : network_(networ
 
 bool SensorMessageHelper::receiveMessage() {
   bool ret = false;
-  if(network_.available()) {
+  if(network_->available()) {
     ret =
-        network_.read(lastHeader, &message_.internalMessage_, sizeof(Message)) != 0 ;
+        network_->read(lastHeader, &message_.internalMessage_, sizeof(Message)) != 0 ;
     #if defined(SERIAL_DEBUG_MESSAGE_HELPER)
     Serial.println(lastHeader.toString());
     Serial.println(message_.toString());
@@ -27,7 +27,7 @@ bool SensorMessageHelper::receiveMessage() {
   return ret;
 }
 bool SensorMessageHelper::updateNetwork() {
-  network_.update();
+  network_->update();
 }
 
 MessageHelper &SensorMessageHelper::getMessage() {
@@ -84,7 +84,7 @@ bool SensorMessageHelper::sendMessage(const Sensor * const & sensor, uint16_t to
     Serial.print(lastHeader.toString());
     delay(1000);
   #endif
-  return network_.write(lastHeader, &message_.internalMessage_, sizeof(Message));
+  return network_->write(lastHeader, &message_.internalMessage_, sizeof(Message));
 }
 
 bool SensorMessageHelper::sendAck(const Sensor * const & sensor) {
