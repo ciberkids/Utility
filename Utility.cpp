@@ -2,6 +2,7 @@
 // Created by Matteo Favaro on 03/08/16.
 //
 
+#include <Message/Message.h>
 #include "Utility.h"
 
 #include "Message.h"
@@ -35,6 +36,7 @@ MessageHelper &SensorMessageHelper::getMessage() {
 
 void SensorMessageHelper::prepareHeartBeatMessage(const Sensor * const & sensor) {
   message_.setSensorID(sensor->getSensorID());
+  message_.setSensorAddress(sensor->getSensorAddress());
   message_.setCommand(C_PRESENTATION);
   message_.setSensorType(sensor->getSensorType());
   message_.setSystemMessageType(I_HEARTBEAT);
@@ -48,6 +50,7 @@ void SensorMessageHelper::prepareHeartBeatAckMessage(const Sensor * const & sens
   message_.setSensorID(sensor->getSensorID());
   //obviusly we are presenting us to the other node
   message_.setCommand(C_PRESENTATION);
+  message_.setSensorAddress(sensor->getSensorAddress());
   message_.setSensorType(message_.getSensorType());
   message_.setSystemMessageType(I_HEARTBEAT_RESPONSE);
   message_.setSensorInformationType(sensor->getSensorInformationType());
@@ -58,6 +61,7 @@ void SensorMessageHelper::prepareHeartBeatAckMessage(const Sensor * const & sens
 void SensorMessageHelper::prepareAckMessage(const Sensor * const & sensor) {
   //use my id for the answer so the receiver will know who is the sender
   message_.setSensorID(sensor->getSensorID());
+  message_.setSensorAddress(sensor->getSensorAddress());
   //we are acknowledging last message
   message_.setCommand(C_ACK);
   // my type
@@ -229,6 +233,18 @@ void Sensor::addReceiver(uint16_t const address,
   myreceiver[id] = new ReceiverListSensor(address,id,sensorMessageHelper, leds);
 }
 
+Sensor *Sensor::getSensorObj(Sensor_type type, MessageHelper &message) {
+
+  switch(type) {
+    case S_LIGHT: return new LightSensor(message.getSensorAddress(),
+                                         message.getSensorID(),
+                                         NULL,
+                                         NULL);
+    default:
+      return NULL;
+  }
+}
+
 //---------------------------------------------
 
 LightRelaySensor::LightRelaySensor(uint16_t const address,
@@ -239,10 +255,13 @@ LightRelaySensor::LightRelaySensor(uint16_t const address,
 { }
 
 bool LightRelaySensor::sensorPresentationReceived() {
-
-  return false;
+  if(sensormap[getMessage().getSensorID()] == NULL) {
+    sensormap[getMessage().getSensorID()] = Sensor::getSensorObj(getMessage().getSensorType(), getMessage());
+  }
+  return true;
 }
 bool LightRelaySensor::setSensorInfo() {
+
   return false;
 }
 bool LightRelaySensor::getSensorInfo() {
@@ -344,6 +363,8 @@ bool ReceiverListSensor::systemFuncion() {
 bool ReceiverListSensor::incomingDataIsAStream() {
   return false;
 }
+
+//---------------------------------------------
 
 
 

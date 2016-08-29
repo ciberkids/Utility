@@ -67,6 +67,8 @@ inline uint16_t getRandomAddressForNetwork() {
 
 }
 
+
+
 //header type for message
 /*
  * User types** (1-127) 1-64 will NOT be acknowledged <br>
@@ -118,7 +120,7 @@ class Sensor {
   Leds *leds_;
 
   Sensor * myreceiver[MAX_RECEIVER]; //use vector for a dynamic number of receiver
-
+  static Sensor *getSensorObj(Sensor_type type, MessageHelper &message);
  public:
   Sensor(uint16_t const address,
          uint8_t const id,
@@ -131,6 +133,9 @@ class Sensor {
   uint8_t getSensorID() const;
   uint16_t getSensorAddress() const;
   Sensor_information_type getSensorInformationType() const;
+  bool newdatae;
+  bool updateAvaiable();
+
 
   void evaluateMessage();
 
@@ -151,6 +156,7 @@ class Sensor {
   virtual bool getSensorInfo() = 0;
   virtual bool systemFuncion() = 0;
   virtual bool incomingDataIsAStream() = 0;
+
 };
 
 
@@ -180,12 +186,14 @@ class LightRelaySensor : public Sensor {
                    uint8_t const id,
                    SensorMessageHelper *sensorMessageHelper,
                    Leds *leds);
+
  private:
   bool sensorPresentationReceived();
   bool setSensorInfo();
   bool getSensorInfo();
   bool systemFuncion();
   bool incomingDataIsAStream();
+
 };
 
 class MotionSensor : public Sensor {
@@ -238,6 +246,8 @@ class ReceiverListSensor : public Sensor {
   bool incomingDataIsAStream();
 
 };
+
+
 
 
 #endif //ARDUINO_MCWW_UTILITY_H
