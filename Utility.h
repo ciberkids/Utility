@@ -94,7 +94,7 @@ class SensorMessageHelper {
   MessageHelper message_;
   RF24NetworkHeader lastHeader;
  public:
-  SensorMessageHelper(RF24Network &network);
+  void begin(RF24Network *network);
   bool receiveMessage();
   bool updateNetwork();
   MessageHelper &getMessage();
@@ -115,7 +115,7 @@ class Sensor {
                             // 1 - 255 -> 1 receiver the receiver has always the id 0
                             // simultaneusly a receiver has a ID refered to its own super group
   const Sensor_type sensorType_;
-  SensorMessageHelper *messagehelper_;
+  static SensorMessageHelper messagehelper_;
   const Sensor_information_type sensorInformationType_;
   Leds *leds_;
 
@@ -126,9 +126,9 @@ class Sensor {
          uint8_t const id,
          Sensor_type const type,
          Sensor_information_type const infotype,
-         SensorMessageHelper *sensorMessageHelper,
          Leds *leds);
 
+  void begin(RF24Network *network);
   Sensor_type getSensorType() const;
   uint8_t getSensorID() const;
   uint16_t getSensorAddress() const;
@@ -148,7 +148,6 @@ class Sensor {
                    uint8_t const id,
                    Sensor_type const type,
                    Sensor_information_type const infotype,
-                   SensorMessageHelper *sensorMessageHelper,
                    Leds *leds );
  protected:
   virtual bool sensorPresentationReceived() = 0;
@@ -184,7 +183,6 @@ class LightRelaySensor : public Sensor {
 
   LightRelaySensor(uint16_t const address,
                    uint8_t const id,
-                   SensorMessageHelper *sensorMessageHelper,
                    Leds *leds);
 
  private:
@@ -200,7 +198,6 @@ class MotionSensor : public Sensor {
  public:
   MotionSensor(uint16_t const address,
                uint8_t const id,
-               SensorMessageHelper *sensorMessageHelper,
                Leds *leds);
  private:
     bool sensorPresentationReceived();
@@ -235,7 +232,6 @@ class ReceiverListSensor : public Sensor {
  public:
   ReceiverListSensor(uint16_t const address,
               uint8_t const id,
-              SensorMessageHelper *sensorMessageHelper,
               Leds *leds);
 
  private:

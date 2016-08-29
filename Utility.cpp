@@ -8,11 +8,9 @@
 #include "Message.h"
 
 
-SensorMessageHelper::SensorMessageHelper(RF24Network &network) : network_(&network)
-    {
-
-    }
-
+void SensorMessageHelper::begin(RF24Network * network){
+  network_ = network;
+}
 
 bool SensorMessageHelper::receiveMessage() {
   bool ret = false;
@@ -96,17 +94,17 @@ Sensor::Sensor(uint16_t const address,
                uint8_t const sensor_id,
                Sensor_type const sensorType,
                Sensor_information_type const sensorInformationType,
-               SensorMessageHelper *sensorMessageHelper,
                Leds *leds)
     : address_(address),
       sensor_id_(sensor_id),
       sensorType_(sensorType),
       sensorInformationType_(sensorInformationType),
-      messagehelper_(sensorMessageHelper),
       leds_(leds)
       { }
 
-
+void Sensor::begin(RF24Network *network) {
+  messagehelper_.begin(network);
+}
 Sensor_type Sensor::getSensorType() const {
   return sensorType_;
 }
@@ -138,16 +136,16 @@ bool Sensor::sendMessage() {
       Serial.println(retry);
       delay(2000);
       #endif
-      if (messagehelper_->sendMessage(this, myreceiver[i]->getSensorAddress())) {
+      if (messagehelper_.sendMessage(this, myreceiver[i]->getSensorAddress())) {
         leds_->ledWhiteLongBlink();
         //wait ACK
         while (millis() < sendAgain && !ans) {
-          messagehelper_->updateNetwork();
-          ans = messagehelper_->receiveMessage();
+          messagehelper_.updateNetwork();
+          ans = messagehelper_.receiveMessage();
           #if defined(SERIAL_DEBUG)
           if(ans) {
             Serial.println(F("HEART BEAT ANSWERED"));
-            Serial.println(messagehelper_->getMessage().toString());
+            Serial.println(messagehelper_.getMessage().toString());
           }
           else {
             Serial.println(F("NO ANSWER"));
@@ -185,17 +183,17 @@ bool Sensor::sendMessage() {
 
 
 bool Sensor::sendHeartBeat() {
-  messagehelper_->prepareHeartBeatMessage(this);
+  messagehelper_.prepareHeartBeatMessage(this);
   return sendMessage();
 }
 
 
 void Sensor::update() {
-  messagehelper_->updateNetwork();
+  messagehelper_.updateNetwork();
 }
 
 MessageHelper& Sensor::getMessage() {
-  return messagehelper_->getMessage();
+  return messagehelper_.getMessage();
 }
 
 void Sensor::evaluateMessage() {
@@ -203,7 +201,7 @@ void Sensor::evaluateMessage() {
   switch (getMessage().getCommand()) {
     case C_PRESENTATION:
       sensorPresentationReceived(); //register the sensor if necessary
-      messagehelper_->prepareHeartBeatAckMessage(this);
+      messagehelper_.prepareHeartBeatAckMessage(this);
       sendMessage();
       break;
     case C_SET:
@@ -227,10 +225,9 @@ void Sensor::addReceiver(uint16_t const address,
                          uint8_t const id,
                          Sensor_type const type,
                          Sensor_information_type const infotype,
-                         SensorMessageHelper *sensorMessageHelper,
                          Leds  *leds ) {
   //TODO better memory handling when the autoconfiguration will bee implemented
-  myreceiver[id] = new ReceiverListSensor(address,id,sensorMessageHelper, leds);
+  myreceiver[id] = new ReceiverListSensor(address,id, leds);
 }
 
 Sensor *Sensor::getSensorObj(Sensor_type type, MessageHelper &message) {
@@ -249,9 +246,8 @@ Sensor *Sensor::getSensorObj(Sensor_type type, MessageHelper &message) {
 
 LightRelaySensor::LightRelaySensor(uint16_t const address,
                                    uint8_t const id,
-                                   SensorMessageHelper *sensorMessageHelper,
                                    Leds *leds) :
-    Sensor(address, id, S_LIGHT, V_LIGHT, sensorMessageHelper, leds)
+    Sensor(address, id, S_LIGHT, V_LIGHT, leds)
 { }
 
 bool LightRelaySensor::sensorPresentationReceived() {
@@ -280,13 +276,11 @@ bool LightRelaySensor::incomingDataIsAStream() {
 
 MotionSensor::MotionSensor(uint16_t const address,
                            uint8_t const id,
-                           SensorMessageHelper *sensorMessageHelper,
                            Leds *leds) :
                             Sensor(address,
                                    id,
                                    S_MOTION,
                                    V_MOTION,
-                                   sensorMessageHelper,
                                    leds) {
 }
 
@@ -316,7 +310,6 @@ LightSensor::LightSensor(uint16_t const address,
            id,
            S_LIGHT_LEVEL,
            V_LIGHT_LEVEL,
-           sensorMessageHelper,
            leds) { }
 
 bool LightSensor::sensorPresentationReceived() {
@@ -339,13 +332,11 @@ bool LightSensor::incomingDataIsAStream() {
 
 ReceiverListSensor::ReceiverListSensor(uint16_t const address,
                          uint8_t const id,
-                         SensorMessageHelper *sensorMessageHelper,
                          Leds *leds) :
     Sensor(address,
            id,
            S_NONE_TYPE,
            V_CUSTOM,
-           sensorMessageHelper,
            leds) { }
 
 bool ReceiverListSensor::sensorPresentationReceived() {
