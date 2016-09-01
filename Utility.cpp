@@ -133,23 +133,26 @@ bool SensorManager::addSensor(Sensor *newsensor) {
   }
   return false;
 }
-bool SensorManager::sensorsHasToSend() {
+bool SensorManager::sensorsHaveToSend() {
+  bool ret = false;
+  for(int i = 0; i < MAX_SENSOR_PER_ARDUINO; i++){
+    ret = ret || sensorOnThisArduino[i]->hasToSend();
+  }
+  return ret;
+}
+bool SensorManager::update() {
   bool ret = false;
   for(int i = 0; i < MAX_SENSOR_PER_ARDUINO; i++){
     ret = ret || sensorOnThisArduino[i]->update();
   }
   return ret;
 }
+
 MessageHelper *SensorManager::getMessage() {
   return &message_;
 }
 
-void SensorManager::prepareMessages() {
-  for(int i = 0; i < MAX_SENSOR_PER_ARDUINO; i++) {
-    sensorOnThisArduino[i]->prepareDataMessageToSend();
-  }
 
-}
 
 Sensor *SensorManager::getSensors(uint8_t index) {
   return sensorOnThisArduino[index];
@@ -170,7 +173,8 @@ Sensor::Sensor(uint16_t const address,
       sensorType_(sensorType),
       sensorInformationType_(sensorInformationType)
       {
-        informationAvailable = false;
+        informationAvailable_ = false;
+        messageSent_ = false;
       }
 
 Sensor_type Sensor::getSensorType() {
@@ -179,8 +183,20 @@ Sensor_type Sensor::getSensorType() {
 uint8_t Sensor::getSensorID() {
   return sensor_id_;
 }
-void Sensor::informationSent() {
-  informationAvailable = false;
+void Sensor::messageSent() {
+  messageSent_ = true;
+}
+bool Sensor::isMessageSent() {
+  return messageSent_;
+}
+void Sensor::setInformationAvaiable() {
+  informationAvailable_ = true;
+}
+void Sensor::setInformationUnAvaiable() {
+  informationAvailable_ = true;
+}
+bool Sensor::isInformationAvaiable() {
+  return informationAvailable_;
 }
 
 void Sensor::setSensorID(uint8_t id) {
@@ -202,31 +218,30 @@ Sensor *Sensor::getParent() {
   return parent_;
 }
 
-
-MessageHelper * Sensor::getMessage() {
-  return &message_;
+void Sensor::setMessageHasToSend() {
+  messageSent_ = false;
 }
 
-void Sensor::evaluateMessage() {
+void Sensor::evaluateMessage(MessageHelper *message) {
 
   switch (getMessage()->getCommand()) {
     case C_PRESENTATION_CHILDREN:
-      sensorChildrenPresentationReceived(); //register the sensor if necessary
+      sensorChildrenPresentationReceived(message); //register the sensor if necessary
       break;
     case C_PRESENTATION_PARENT:
-      sensorParentPresentationReceived();
+      sensorParentPresentationReceived(message);
       break;
     case C_SET:
-      setSensorInfo(); //based on sensor information type and ID set the data
+      setSensorInfo(message); //based on sensor information type and ID set the data
       break;
     case C_REQ:
-      getSensorInfo(); //based on sensor information type and ID get the data
+      getSensorInfo(message); //based on sensor information type and ID get the data
       break;
     case C_SYSTEM:
-      systemFuncion(); // set the sensor type, delay time, or other
+      systemFuncion(message); // set the sensor type, delay time, or other
       break;
     case C_STREAM:
-      incomingDataIsAStream();// some kind or streaming data
+      incomingDataIsAStream(message);// some kind or streaming data
       break;
     default:
       return;
@@ -258,32 +273,35 @@ RelaySensor::RelaySensor(uint16_t const address,
 { }
 
 
-bool RelaySensor::prepareDataMessageToSend() {
+bool RelaySensor::prepareDataMessageToSend(MessageHelper *message) {
 }
 bool RelaySensor::update() {
 }
+bool RelaySensor::hasToSend() {
+}
 
-bool RelaySensor::sensorParentPresentationReceived() {
+bool RelaySensor::sensorParentPresentationReceived(MessageHelper *message) {
 }
 
 
-bool RelaySensor::sensorChildrenPresentationReceived() {
+
+bool RelaySensor::sensorChildrenPresentationReceived(MessageHelper *message) {
   if(sensormap[getMessage()->getSensorID()] == NULL) {
-    sensormap[getMessage()->getSensorID()] = Sensor::getSensorObj(getMessage());
+    sensormap[getMessage()->getSensorID()] = Sensor::getSensorObj(message);
   }
   return true;
 }
-bool RelaySensor::setSensorInfo() {
+bool RelaySensor::setSensorInfo(MessageHelper *message) {
 
   return false;
 }
-bool RelaySensor::getSensorInfo() {
+bool RelaySensor::getSensorInfo(MessageHelper *message) {
   return false;
 }
-bool RelaySensor::systemFuncion() {
+bool RelaySensor::systemFuncion(MessageHelper *message) {
   return false;
 }
-bool RelaySensor::incomingDataIsAStream() {
+bool RelaySensor::incomingDataIsAStream(MessageHelper *message) {
   return false;
 }
 
@@ -299,27 +317,28 @@ MotionSensor::MotionSensor(uint16_t const address,
                                    V_MOTION) {
 }
 
-bool MotionSensor::prepareDataMessageToSend() {
+bool MotionSensor::prepareDataMessageToSend(MessageHelper *message) {
 }
 bool MotionSensor::update() {
 }
-
-bool MotionSensor::sensorParentPresentationReceived() {
+bool MotionSensor::hasToSend() {
+}
+bool MotionSensor::sensorParentPresentationReceived(MessageHelper *message) {
 }
 
-bool MotionSensor::sensorChildrenPresentationReceived() {
+bool MotionSensor::sensorChildrenPresentationReceived(MessageHelper *message) {
   return false;
 }
-bool MotionSensor::setSensorInfo() {
+bool MotionSensor::setSensorInfo(MessageHelper *message) {
   return false;
 }
-bool MotionSensor::getSensorInfo() {
+bool MotionSensor::getSensorInfo(MessageHelper *message) {
   return false;
 }
-bool MotionSensor::systemFuncion() {
+bool MotionSensor::systemFuncion(MessageHelper *message) {
   return false;
 }
-bool MotionSensor::incomingDataIsAStream() {
+bool MotionSensor::incomingDataIsAStream(MessageHelper *message) {
   return false;
 }
 
@@ -334,27 +353,28 @@ LightLevelSensor::LightLevelSensor(uint16_t const address,
 
 
 
-bool LightLevelSensor::prepareDataMessageToSend() {
+bool LightLevelSensor::prepareDataMessageToSend(MessageHelper *message) {
 }
 bool LightLevelSensor::update() {
 }
-
-bool LightLevelSensor::sensorParentPresentationReceived() {
+bool LightLevelSensor::hasToSend() {
+}
+bool LightLevelSensor::sensorParentPresentationReceived(MessageHelper *message) {
 }
 
-bool LightLevelSensor::sensorChildrenPresentationReceived() {
+bool LightLevelSensor::sensorChildrenPresentationReceived(MessageHelper *message) {
   return false;
 }
-bool LightLevelSensor::setSensorInfo() {
+bool LightLevelSensor::setSensorInfo(MessageHelper *message) {
   return false;
 }
-bool LightLevelSensor::getSensorInfo() {
+bool LightLevelSensor::getSensorInfo(MessageHelper *message) {
   return false;
 }
-bool LightLevelSensor::systemFuncion() {
+bool LightLevelSensor::systemFuncion(MessageHelper *message) {
   return false;
 }
-bool LightLevelSensor::incomingDataIsAStream() {
+bool LightLevelSensor::incomingDataIsAStream(MessageHelper *message) {
   return false;
 }
 

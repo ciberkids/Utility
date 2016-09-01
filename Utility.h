@@ -115,8 +115,9 @@ class Sensor {
   const Sensor_information_type sensorInformationType_;
   char name[31];//30 char for name I.E "motion stairs entrance 1" (24 char)
   Sensor *parent_;
-  bool informationAvailable;
-  MessageHelper message_;
+  bool informationAvailable_;
+  bool messageSent_;
+
  public:
   static Sensor *getSensorObj(MessageHelper *heartbeatMessage);
   Sensor(uint16_t const address,
@@ -126,9 +127,15 @@ class Sensor {
 
   Sensor_type getSensorType();
   uint8_t getSensorID();
-  void informationSent();
+  void messageSent();
+  void setMessageHasToSend();
+  void setInformationAvaiable();
+  void setInformationUnAvaiable();
+  bool isInformationAvaiable();
+  bool isMessageSent();
   virtual bool update() = 0;
-  virtual bool prepareDataMessageToSend() = 0;
+  virtual bool hasToSend() = 0;
+  virtual bool prepareDataMessageToSend(MessageHelper *message) = 0;
 
   void setSensorID(uint8_t id);
   uint16_t getSensorAddress() const;
@@ -137,19 +144,19 @@ class Sensor {
   Sensor *getParent();
   void setParent(Sensor *parent);
 
-  void evaluateMessage();
+  void evaluateMessage(MessageHelper *message);
 
   // Communication methods
   //change all with the new style
   MessageHelper* getMessage();
 
  protected:
-  virtual bool sensorChildrenPresentationReceived() = 0;
-  virtual bool sensorParentPresentationReceived() = 0;
-  virtual bool setSensorInfo() = 0;
-  virtual bool getSensorInfo() = 0;
-  virtual bool systemFuncion() = 0;
-  virtual bool incomingDataIsAStream() = 0;
+  virtual bool sensorChildrenPresentationReceived(MessageHelper *message) = 0;
+  virtual bool sensorParentPresentationReceived(MessageHelper *message) = 0;
+  virtual bool setSensorInfo(MessageHelper *message) = 0;
+  virtual bool getSensorInfo(MessageHelper *message) = 0;
+  virtual bool systemFuncion(MessageHelper *message) = 0;
+  virtual bool incomingDataIsAStream(MessageHelper *message) = 0;
   //method for returning available command for this sensor;
 };
 
@@ -190,9 +197,9 @@ class SensorManager {
 
  public:
   bool addSensor(Sensor * sensor);
-  bool sensorsHasToSend();
+  bool update();
+  bool sensorsHaveToSend();
   MessageHelper *getMessage();
-  void prepareMessages();
 
   Sensor *getSensors(uint8_t index);
   uint8_t getSensorsNum();
@@ -223,15 +230,16 @@ class RelaySensor : public Sensor {
 
   RelaySensor(uint16_t const address,
                    uint8_t const id);
-  bool prepareDataMessageToSend();
+  bool prepareDataMessageToSend(MessageHelper *message);
   bool update();
+  bool hasToSend();
  private:
-  bool sensorChildrenPresentationReceived();
-  bool sensorParentPresentationReceived();
-  bool setSensorInfo();
-  bool getSensorInfo();
-  bool systemFuncion();
-  bool incomingDataIsAStream();
+  bool sensorChildrenPresentationReceived(MessageHelper *message);
+  bool sensorParentPresentationReceived(MessageHelper *message);
+  bool setSensorInfo(MessageHelper *message);
+  bool getSensorInfo(MessageHelper *message);
+  bool systemFuncion(MessageHelper *message);
+  bool incomingDataIsAStream(MessageHelper *message);
 
 };
 
@@ -239,15 +247,16 @@ class MotionSensor : public Sensor {
  public:
   MotionSensor(uint16_t const address,
                uint8_t const id);
-  bool prepareDataMessageToSend();
+  bool prepareDataMessageToSend(MessageHelper *message);
   bool update();
+  bool hasToSend();
  private:
-  bool sensorChildrenPresentationReceived();
-  bool sensorParentPresentationReceived();
-  bool setSensorInfo();
-  bool getSensorInfo();
-  bool systemFuncion();
-  bool incomingDataIsAStream();
+  bool sensorChildrenPresentationReceived(MessageHelper *message);
+  bool sensorParentPresentationReceived(MessageHelper *message);
+  bool setSensorInfo(MessageHelper *message);
+  bool getSensorInfo(MessageHelper *message);
+  bool systemFuncion(MessageHelper *message);
+  bool incomingDataIsAStream(MessageHelper *message);
 
 };
 
@@ -255,15 +264,16 @@ class LightLevelSensor : public Sensor {
  public:
   LightLevelSensor(uint16_t const address,
               uint8_t const id);
-  bool prepareDataMessageToSend();
+  bool prepareDataMessageToSend(MessageHelper *message);
   bool update();
+  bool hasToSend();
  private:
-  bool sensorChildrenPresentationReceived();
-  bool sensorParentPresentationReceived();
-  bool setSensorInfo();
-  bool getSensorInfo();
-  bool systemFuncion();
-  bool incomingDataIsAStream();
+  bool sensorChildrenPresentationReceived(MessageHelper *message);
+  bool sensorParentPresentationReceived(MessageHelper *message);
+  bool setSensorInfo(MessageHelper *message);
+  bool getSensorInfo(MessageHelper *message);
+  bool systemFuncion(MessageHelper *message);
+  bool incomingDataIsAStream(MessageHelper *message);
 
 };
 
