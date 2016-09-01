@@ -2,115 +2,191 @@
 // Created by Matteo Favaro on 03/08/16.
 //
 
-#include <Message/Message.h>
 #include "Utility.h"
-
+#include <string.h>
 #include "Message.h"
 
 
-void SensorMessageHelper::begin(RF24Network * network){
-  network_ = network;
+//// ***** FREE FUNC
+bool isHeartBeatMessage(MessageHelper * message) {
+  return (message->getCommand() == C_PRESENTATION_PARENT ||
+      message->getCommand() == C_PRESENTATION_CHILDREN)
+      &&
+          message->getSystemMessageType() == I_HEARTBEAT;
+}
+bool isMessageFromParent(MessageHelper * message) {
+  return message->getCommand() == C_PRESENTATION_PARENT &&
+      message->getSystemMessageType() == I_HEARTBEAT;
 }
 
-bool SensorMessageHelper::receiveMessage() {
+Payload_type getPayloadTypeFromData(char* data) { return P_STRING; };
+Payload_type getPayloadTypeFromData(char data) { return P_CHAR; };
+Payload_type getPayloadTypeFromData(unsigned char data) { return P_UCHAR; };
+Payload_type getPayloadTypeFromData(unsigned int data) { return P_UINT; };
+Payload_type getPayloadTypeFromData(int data) { return P_INT; };
+Payload_type getPayloadTypeFromData(long data) { return P_LONG32; };
+Payload_type getPayloadTypeFromData(unsigned long data) { return P_ULONG32; };
+Payload_type getPayloadTypeFromData(float data) { return P_FLOAT32; };
+Payload_type getPayloadTypeFromData(bool data) { return P_BOOL; };
+
+MessageHelper *prepareHeartChildrenBeatMessage(Sensor *fromSensor,
+                                               MessageHelper *message) {
+  //use my id for the answer so the receiver will know who is the sender
+  message->setSensorID(fromSensor->getSensorID());
+  //obviusly we are presenting us to the other node
+  message->setCommand(C_PRESENTATION_CHILDREN);
+  message->setSensorAddress(fromSensor->getSensorAddress());
+  message->setSensorType(fromSensor->getSensorType());
+  message->setSystemMessageType(I_HEARTBEAT);
+  message->setSensorInformationType(fromSensor->getSensorInformationType());
+  message->setPayloadType(P_HEARTBEAT);
+  return message;
+}
+MessageHelper *prepareHeartParentBeatMessage(Sensor *fromSensor,
+                                             MessageHelper *message) {
+  //use my id for the answer so the receiver will know who is the sender
+  message->setSensorID(fromSensor->getSensorID());
+  //obviusly we are presenting us to the other node
+  message->setCommand(C_PRESENTATION_PARENT);
+  message->setSensorAddress(fromSensor->getSensorAddress());
+  message->setSensorType(fromSensor->getSensorType());
+  message->setSystemMessageType(I_HEARTBEAT);
+  message->setSensorInformationType(fromSensor->getSensorInformationType());
+  message->setPayloadType(P_HEARTBEAT);
+  return message;
+}
+
+MessageHelper *prepareHeartBeatAckMessage(Sensor *fromSensor,
+                                          MessageHelper *message) {
+  message->setSensorID(fromSensor->getSensorID());
+  message->setSensorAddress(fromSensor->getSensorAddress());
+  message->setCommand(C_ACK);
+  message->setSensorType(fromSensor->getSensorType());
+  message->setSystemMessageType(I_HEARTBEAT);
+  message->setSensorInformationType(fromSensor->getSensorInformationType());
+  message->setPayloadType(P_HEARTBEAT);
+  return message;
+}
+
+MessageHelper *prepareAckMessage(Sensor  &fromSensor,
+                                 MessageHelper *message) {
+  //use my id for the answer so the receiver will know who is the sender
+  message->setSensorID(fromSensor.getSensorID());
+  message->setSensorAddress(fromSensor.getSensorAddress());
+  //we are acknowledging last message
+  message->setCommand(C_ACK);
+  // my type
+  message->setSensorType(fromSensor.getSensorType());
+  message->setSystemMessageType(I_ACK);
+  // we are acknowledging the information of the incoming message
+  message->setSensorInformationType(fromSensor.getSensorInformationType());
+  message->setPayloadType(P_ACK);
+}
+
+
+
+
+////****** SensorMessageHelper ******
+
+void SensorMessageHelper::begin(RF24Network &network) {
+  network_ = &network;
+}
+uint8_t SensorMessageHelper::receiveMessage(MessageHelper * message) {
   bool ret = false;
-  if(network_->available()) {
     ret =
-        network_->read(lastHeader, &message_.internalMessage_, sizeof(Message)) != 0 ;
+        network_->read(lastHeader, &message->internalMessage_, sizeof(Message)) != 0 ;
     #if defined(SERIAL_DEBUG_MESSAGE_HELPER)
     Serial.println(lastHeader.toString());
     Serial.println(message_.toString());
     #endif
+
+  return ret;
+}
+uint8_t SensorMessageHelper::updateNetwork() {
+  return network_->update();
+}
+bool SensorMessageHelper::networkAvailable() {
+  return network_->available();
+}
+
+bool SensorMessageHelper::sendMessage(Sensor *fromSensor,
+                                      Sensor *toSensor,
+                                      MessageHelper const *message) {
+  RF24NetworkHeader header(toSensor->getSensorAddress(), MESSAGE_HEADER_TYPE);
+  header.from_node = fromSensor->getSensorAddress();
+  lastHeader = header;
+  #if defined(SERIAL_DEBUG)
+  Serial.println(F("Sending message with header:"));
+  Serial.print(lastHeader.toString());
+  delay(1000);
+  #endif
+  return network_->write(lastHeader, &message->internalMessage_, sizeof(Message));
+}
+
+
+////****** SensorManager ******
+
+bool SensorManager::addSensor(Sensor *newsensor) {
+  if(sensorOnThisArduino[newsensor->getSensorID()] == NULL) {
+    sensorOnThisArduino[newsensor->getSensorID()] = newsensor;
+    return true;
+  }
+  return false;
+}
+bool SensorManager::sensorsHasToSend() {
+  bool ret = false;
+  for(int i = 0; i < MAX_SENSOR_PER_ARDUINO; i++){
+    ret = ret || sensorOnThisArduino[i]->update();
   }
   return ret;
 }
-bool SensorMessageHelper::updateNetwork() {
-  network_->update();
+MessageHelper *SensorManager::getMessage() {
+  return &message_;
 }
 
-MessageHelper &SensorMessageHelper::getMessage() {
-  return message_;
+void SensorManager::prepareMessages() {
+  for(int i = 0; i < MAX_SENSOR_PER_ARDUINO; i++) {
+    sensorOnThisArduino[i]->prepareDataMessageToSend();
+  }
+
 }
 
-void SensorMessageHelper::prepareHeartBeatMessage(const Sensor * const & sensor) {
-  message_.setSensorID(sensor->getSensorID());
-  message_.setSensorAddress(sensor->getSensorAddress());
-  message_.setCommand(C_PRESENTATION);
-  message_.setSensorType(sensor->getSensorType());
-  message_.setSystemMessageType(I_HEARTBEAT);
-  message_.setSensorInformationType(sensor->getSensorInformationType());
-  message_.setPayloadType(P_HEARTBEAT);
-  message_.setPayloadSize(0);
+Sensor *SensorManager::getSensors(uint8_t index) {
+  return sensorOnThisArduino[index];
 }
 
-void SensorMessageHelper::prepareHeartBeatAckMessage(const Sensor * const & sensor) {
-  //use my id for the answer so the receiver will know who is the sender
-  message_.setSensorID(sensor->getSensorID());
-  //obviusly we are presenting us to the other node
-  message_.setCommand(C_PRESENTATION);
-  message_.setSensorAddress(sensor->getSensorAddress());
-  message_.setSensorType(message_.getSensorType());
-  message_.setSystemMessageType(I_HEARTBEAT_RESPONSE);
-  message_.setSensorInformationType(sensor->getSensorInformationType());
-  message_.setPayloadType(P_HEARTBEAT);
-  message_.setPayloadSize(0);
+uint8_t SensorManager::getSensorsNum() {
+  return MAX_SENSOR_PER_ARDUINO;
 }
 
-void SensorMessageHelper::prepareAckMessage(const Sensor * const & sensor) {
-  //use my id for the answer so the receiver will know who is the sender
-  message_.setSensorID(sensor->getSensorID());
-  message_.setSensorAddress(sensor->getSensorAddress());
-  //we are acknowledging last message
-  message_.setCommand(C_ACK);
-  // my type
-  message_.setSensorType(sensor->getSensorType());
-  message_.setSystemMessageType(I_ACK);
-  // we are acknowledging the information of the incoming message
-  message_.setSensorInformationType(message_.getSensorInformationType());
-  message_.setPayloadType(P_ACK);
-  message_.setPayloadSize(0);
-}
-
-
-
-bool SensorMessageHelper::sendMessage(const Sensor * const & sensor, uint16_t to_node) {
-  RF24NetworkHeader header(to_node, MESSAGE_HEADER_TYPE);
-  header.from_node = sensor->getSensorAddress();
-  lastHeader = header;
-  #if defined(SERIAL_DEBUG)
-    Serial.println(F("Sending message with header:"));
-    Serial.print(lastHeader.toString());
-    delay(1000);
-  #endif
-  return network_->write(lastHeader, &message_.internalMessage_, sizeof(Message));
-}
-
-bool SensorMessageHelper::sendAck(const Sensor * const & sensor) {
-  return sendMessage(sensor, lastHeader.from_node);
-}
-/////--------------------------------------
+////****** Sensor ******
 
 Sensor::Sensor(uint16_t const address,
                uint8_t const sensor_id,
                Sensor_type const sensorType,
-               Sensor_information_type const sensorInformationType,
-               Leds *leds)
+               Sensor_information_type const sensorInformationType)
     : address_(address),
       sensor_id_(sensor_id),
       sensorType_(sensorType),
-      sensorInformationType_(sensorInformationType),
-      leds_(leds)
-      { }
+      sensorInformationType_(sensorInformationType)
+      {
+        informationAvailable = false;
+      }
 
-void Sensor::begin(RF24Network *network) {
-  messagehelper_.begin(network);
-}
-Sensor_type Sensor::getSensorType() const {
+Sensor_type Sensor::getSensorType() {
   return sensorType_;
 }
-uint8_t Sensor::getSensorID() const {
+uint8_t Sensor::getSensorID() {
   return sensor_id_;
 }
+void Sensor::informationSent() {
+  informationAvailable = false;
+}
+
+void Sensor::setSensorID(uint8_t id) {
+  sensor_id_ = id;
+}
+
 uint16_t Sensor::getSensorAddress() const {
   return address_;
 }
@@ -118,91 +194,27 @@ Sensor_information_type Sensor::getSensorInformationType() const {
   return sensorInformationType_;
 }
 
-bool Sensor::sendMessage() {
-  unsigned long sendAgain = millis() + MIN_WAIT_TIME;
-  bool ans = false;
-  uint8_t retry = 0;
-  for (int i = 0; i < MAX_RECEIVER; i++) {
-    leds_->ledGreenLongBlink();
+void Sensor::setParent(Sensor *parent) {
+  parent_ = parent;
+}
 
-    if(myreceiver[i] == NULL) continue;
-    while (!ans && retry < MAX_RETRY) {
-      #if defined(SERIAL_DEBUG)
-        Serial.print(F("trying to send hearbeat to "));
-        Serial.print(myreceiver[i]->getSensorAddress(), OCT);
-        Serial.print(F(" i have this address: "));
-        Serial.print(address_, OCT);
-      Serial.print(F(" retry: "));
-      Serial.println(retry);
-      delay(2000);
-      #endif
-      if (messagehelper_.sendMessage(this, myreceiver[i]->getSensorAddress())) {
-        leds_->ledWhiteLongBlink();
-        //wait ACK
-        while (millis() < sendAgain && !ans) {
-          messagehelper_.updateNetwork();
-          ans = messagehelper_.receiveMessage();
-          #if defined(SERIAL_DEBUG)
-          if(ans) {
-            Serial.println(F("HEART BEAT ANSWERED"));
-            Serial.println(messagehelper_.getMessage().toString());
-          }
-          else {
-            Serial.println(F("NO ANSWER"));
-
-          }
-          #endif
-        }
-        sendAgain = millis() + MIN_WAIT_TIME;
-        if (!ans) retry++;
-
-        #if defined(SERIAL_DEBUG)
-        Serial.println(F("NEW RETRY!!"));
-        delay(2000);
-        #endif
-      }
-      else {
-        #if defined(SERIAL_DEBUG)
-        Serial.println(F("SENDFAIL!!!"));
-        delay(2000);
-        #endif
-        leds_->ledRedThreeLongBlink();
-        leds_->ledRedOn();
-        retry++;
-      }
-    }
-    if(ans) {
-      leds_->ledWhiteThreeLongBlink();
-    }
-    if(retry > MAX_RETRY) {
-      leds_->ledRedThreeLongBlink();
-    }
-  }
-  return ans;
+Sensor *Sensor::getParent() {
+  return parent_;
 }
 
 
-bool Sensor::sendHeartBeat() {
-  messagehelper_.prepareHeartBeatMessage(this);
-  return sendMessage();
-}
-
-
-void Sensor::update() {
-  messagehelper_.updateNetwork();
-}
-
-MessageHelper& Sensor::getMessage() {
-  return messagehelper_.getMessage();
+MessageHelper * Sensor::getMessage() {
+  return &message_;
 }
 
 void Sensor::evaluateMessage() {
 
-  switch (getMessage().getCommand()) {
-    case C_PRESENTATION:
-      sensorPresentationReceived(); //register the sensor if necessary
-      messagehelper_.prepareHeartBeatAckMessage(this);
-      sendMessage();
+  switch (getMessage()->getCommand()) {
+    case C_PRESENTATION_CHILDREN:
+      sensorChildrenPresentationReceived(); //register the sensor if necessary
+      break;
+    case C_PRESENTATION_PARENT:
+      sensorParentPresentationReceived();
       break;
     case C_SET:
       setSensorInfo(); //based on sensor information type and ID set the data
@@ -221,22 +233,18 @@ void Sensor::evaluateMessage() {
   }
 }
 
-void Sensor::addReceiver(uint16_t const address,
-                         uint8_t const id,
-                         Sensor_type const type,
-                         Sensor_information_type const infotype,
-                         Leds  *leds ) {
-  //TODO better memory handling when the autoconfiguration will bee implemented
-  myreceiver[id] = new ReceiverListSensor(address,id, leds);
-}
 
-Sensor *Sensor::getSensorObj(Sensor_type type, MessageHelper &message) {
 
-  switch(type) {
-    case S_LIGHT: return new LightSensor(message.getSensorAddress(),
-                                         message.getSensorID(),
-                                         NULL,
-                                         NULL);
+
+Sensor *Sensor::getSensorObj( MessageHelper *message) {
+
+  switch(message->getSensorType()) {
+    case S_LIGHT: return new RelaySensor(message->getSensorAddress(),
+                                         message->getSensorID());
+    case S_MOTION: return new MotionSensor(message->getSensorAddress(),
+                                           message->getSensorID());
+    case S_LIGHT_LEVEL: return new LightLevelSensor(message->getSensorAddress(),
+                                                message->getSensorID());
     default:
       return NULL;
   }
@@ -244,29 +252,38 @@ Sensor *Sensor::getSensorObj(Sensor_type type, MessageHelper &message) {
 
 //---------------------------------------------
 
-LightRelaySensor::LightRelaySensor(uint16_t const address,
-                                   uint8_t const id,
-                                   Leds *leds) :
-    Sensor(address, id, S_LIGHT, V_LIGHT, leds)
+RelaySensor::RelaySensor(uint16_t const address,
+                                   uint8_t const id) :
+    Sensor(address, id, S_LIGHT, V_LIGHT)
 { }
 
-bool LightRelaySensor::sensorPresentationReceived() {
-  if(sensormap[getMessage().getSensorID()] == NULL) {
-    sensormap[getMessage().getSensorID()] = Sensor::getSensorObj(getMessage().getSensorType(), getMessage());
+
+bool RelaySensor::prepareDataMessageToSend() {
+}
+bool RelaySensor::update() {
+}
+
+bool RelaySensor::sensorParentPresentationReceived() {
+}
+
+
+bool RelaySensor::sensorChildrenPresentationReceived() {
+  if(sensormap[getMessage()->getSensorID()] == NULL) {
+    sensormap[getMessage()->getSensorID()] = Sensor::getSensorObj(getMessage());
   }
   return true;
 }
-bool LightRelaySensor::setSensorInfo() {
+bool RelaySensor::setSensorInfo() {
 
   return false;
 }
-bool LightRelaySensor::getSensorInfo() {
+bool RelaySensor::getSensorInfo() {
   return false;
 }
-bool LightRelaySensor::systemFuncion() {
+bool RelaySensor::systemFuncion() {
   return false;
 }
-bool LightRelaySensor::incomingDataIsAStream() {
+bool RelaySensor::incomingDataIsAStream() {
   return false;
 }
 
@@ -275,16 +292,22 @@ bool LightRelaySensor::incomingDataIsAStream() {
 //---------------------------------------------
 
 MotionSensor::MotionSensor(uint16_t const address,
-                           uint8_t const id,
-                           Leds *leds) :
+                           uint8_t const id) :
                             Sensor(address,
                                    id,
                                    S_MOTION,
-                                   V_MOTION,
-                                   leds) {
+                                   V_MOTION) {
 }
 
-bool MotionSensor::sensorPresentationReceived() {
+bool MotionSensor::prepareDataMessageToSend() {
+}
+bool MotionSensor::update() {
+}
+
+bool MotionSensor::sensorParentPresentationReceived() {
+}
+
+bool MotionSensor::sensorChildrenPresentationReceived() {
   return false;
 }
 bool MotionSensor::setSensorInfo() {
@@ -302,60 +325,42 @@ bool MotionSensor::incomingDataIsAStream() {
 
 //---------------------------------------------
 
-LightSensor::LightSensor(uint16_t const address,
-                         uint8_t const id,
-                         SensorMessageHelper *sensorMessageHelper,
-                         Leds *leds) :
+LightLevelSensor::LightLevelSensor(uint16_t const address,
+                         uint8_t const id):
     Sensor(address,
            id,
            S_LIGHT_LEVEL,
-           V_LIGHT_LEVEL,
-           leds) { }
+           V_LIGHT_LEVEL) { }
 
-bool LightSensor::sensorPresentationReceived() {
-  return false;
+
+
+bool LightLevelSensor::prepareDataMessageToSend() {
 }
-bool LightSensor::setSensorInfo() {
-  return false;
-}
-bool LightSensor::getSensorInfo() {
-  return false;
-}
-bool LightSensor::systemFuncion() {
-  return false;
-}
-bool LightSensor::incomingDataIsAStream() {
-  return false;
+bool LightLevelSensor::update() {
 }
 
-//---------------------------------------------
+bool LightLevelSensor::sensorParentPresentationReceived() {
+}
 
-ReceiverListSensor::ReceiverListSensor(uint16_t const address,
-                         uint8_t const id,
-                         Leds *leds) :
-    Sensor(address,
-           id,
-           S_NONE_TYPE,
-           V_CUSTOM,
-           leds) { }
-
-bool ReceiverListSensor::sensorPresentationReceived() {
+bool LightLevelSensor::sensorChildrenPresentationReceived() {
   return false;
 }
-bool ReceiverListSensor::setSensorInfo() {
+bool LightLevelSensor::setSensorInfo() {
   return false;
 }
-bool ReceiverListSensor::getSensorInfo() {
+bool LightLevelSensor::getSensorInfo() {
   return false;
 }
-bool ReceiverListSensor::systemFuncion() {
+bool LightLevelSensor::systemFuncion() {
   return false;
 }
-bool ReceiverListSensor::incomingDataIsAStream() {
+bool LightLevelSensor::incomingDataIsAStream() {
   return false;
 }
 
 //---------------------------------------------
+
+
 
 
 

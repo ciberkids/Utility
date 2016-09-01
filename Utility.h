@@ -23,7 +23,7 @@
  * 4: 5th child of master
  */
 inline uint16_t getRandomAddressForNetwork() {
-  randomSeed(analogRead(0));
+  randomSeed(analogRead(A0));
   uint16_t temp;
   uint16_t ret = 1;
   // 4th level
@@ -33,7 +33,7 @@ inline uint16_t getRandomAddressForNetwork() {
     Serial.println(ret, OCT);;
   #endif
   // 3th level
-  randomSeed(analogRead(0));
+  randomSeed(analogRead(A0));
   temp = static_cast<uint16_t >(random(0, 6));
   ret <<= 3;
   ret &= temp;
@@ -42,7 +42,7 @@ inline uint16_t getRandomAddressForNetwork() {
     Serial.println(ret, OCT);;
   #endif
   // 2nd level
-  randomSeed(analogRead(0));
+  randomSeed(analogRead(A0));
   temp = static_cast<uint16_t >(random((temp==0)?1:0, 6));
   ret <<= 3;
   ret &= temp;
@@ -52,7 +52,7 @@ inline uint16_t getRandomAddressForNetwork() {
   #endif
 
   // 1st level
-  randomSeed(analogRead(0));
+  randomSeed(analogRead(A0));
 
   temp = static_cast<uint16_t >(random((temp==0)?1:0, 6));
   ret <<= 3;
@@ -86,81 +86,121 @@ inline uint16_t getRandomAddressForNetwork() {
 #define MAX_RECEIVER 2
 #define MAX_RETRY 2
 #define MIN_WAIT_TIME 4000
-
-class Sensor;
-
-class SensorMessageHelper {
-  RF24Network *network_;
-  MessageHelper message_;
-  RF24NetworkHeader lastHeader;
- public:
-  void begin(RF24Network *network);
-  bool receiveMessage();
-  bool updateNetwork();
-  MessageHelper &getMessage();
-  bool sendMessage(const Sensor * const & sensor, uint16_t to_node);
-  bool sendAck(const Sensor * const & sensor);
-  void prepareHeartBeatAckMessage(const Sensor * const & sensor);
-  void prepareHeartBeatMessage(const Sensor * const & sensor);
-  void prepareAckMessage(const Sensor * const & sensor);
-};
+#define MAX_SENSOR_PER_ARDUINO 3
 
 
+bool isHeartBeatMessage(MessageHelper *message);
+bool isMessageFromParent(MessageHelper *message);
+Payload_type getPayloadTypeFromData(char* data);
+Payload_type getPayloadTypeFromData(char data);
+Payload_type getPayloadTypeFromData(unsigned char data);
+Payload_type getPayloadTypeFromData(int16_t data);
+Payload_type getPayloadTypeFromData(uint16_t data);
+Payload_type getPayloadTypeFromData(long data);
+Payload_type getPayloadTypeFromData(unsigned long data);
+Payload_type getPayloadTypeFromData(float data);
+Payload_type getPayloadTypeFromData(bool data);
+template<class T>
+uint8_t getDim(T const& obj) {return sizeof(obj);}
+inline uint8_t getDim(char string[]) {return strlen(string);}
 
 class Sensor {
   const uint16_t address_;  // this is the RF24Network addres in octal form
-  const uint8_t sensor_id_; // the id is a number that could be 1 to 255
+  uint8_t sensor_id_; // the id is a number that could be 1 to 255
                             // each group of sensor that are connected to a receiver
                             // can have a numeration from 0 to 255
                             // 1 - 255 -> 1 receiver the receiver has always the id 0
                             // simultaneusly a receiver has a ID refered to its own super group
   const Sensor_type sensorType_;
-  static SensorMessageHelper messagehelper_;
   const Sensor_information_type sensorInformationType_;
-  Leds *leds_;
-
-  Sensor * myreceiver[MAX_RECEIVER]; //use vector for a dynamic number of receiver
+  char name[31];//30 char for name I.E "motion stairs entrance 1" (24 char)
+  Sensor *parent_;
+  bool informationAvailable;
+  MessageHelper message_;
  public:
-  static Sensor *getSensorObj(Sensor_type type, MessageHelper &message);
+  static Sensor *getSensorObj(MessageHelper *heartbeatMessage);
   Sensor(uint16_t const address,
          uint8_t const id,
          Sensor_type const type,
-         Sensor_information_type const infotype,
-         Leds *leds);
+         Sensor_information_type const infotype);
 
-  void begin(RF24Network *network);
-  Sensor_type getSensorType() const;
-  uint8_t getSensorID() const;
+  Sensor_type getSensorType();
+  uint8_t getSensorID();
+  void informationSent();
+  virtual bool update() = 0;
+  virtual bool prepareDataMessageToSend() = 0;
+
+  void setSensorID(uint8_t id);
   uint16_t getSensorAddress() const;
   Sensor_information_type getSensorInformationType() const;
-  bool newdatae;
-  bool updateAvaiable();
 
+  Sensor *getParent();
+  void setParent(Sensor *parent);
 
   void evaluateMessage();
 
   // Communication methods
-  bool sendHeartBeat();
-  bool sendMessage();
-  void update();
-  MessageHelper& getMessage();
-  void addReceiver(uint16_t const address,
-                   uint8_t const id,
-                   Sensor_type const type,
-                   Sensor_information_type const infotype,
-                   Leds *leds );
+  //change all with the new style
+  MessageHelper* getMessage();
+
  protected:
-  virtual bool sensorPresentationReceived() = 0;
+  virtual bool sensorChildrenPresentationReceived() = 0;
+  virtual bool sensorParentPresentationReceived() = 0;
   virtual bool setSensorInfo() = 0;
   virtual bool getSensorInfo() = 0;
   virtual bool systemFuncion() = 0;
   virtual bool incomingDataIsAStream() = 0;
+  //method for returning available command for this sensor;
+};
 
+MessageHelper *prepareHeartChildrenBeatMessage(Sensor *fromSensor, MessageHelper *message);
+MessageHelper *prepareHeartParentBeatMessage(Sensor *fromSensor, MessageHelper *message);
+MessageHelper *prepareHeartBeatAckMessage(Sensor *fromSensor, MessageHelper *message);
+MessageHelper *prepareAckMessage(Sensor *fromSensor, MessageHelper *message);
+template<class T>
+MessageHelper *prepareNewDataMessage(Sensor *fromSensor, MessageHelper *message, T data) {
+  message->setSensorID(fromSensor->getSensorID());
+  message->setSensorAddress(fromSensor->getSensorAddress());
+  message->setCommand(C_SET);
+  message->setSensorType(fromSensor->getSensorType());
+  message->setSystemMessageType(I_NEWVALUE);
+  message->setSensorInformationType(fromSensor->getSensorInformationType());
+  message->setPayloadType(getPayloadTypeFromData(data));
+  memcpy(message->getPayload(), &data, getDim(data));
+}
+
+
+class SensorMessageHelper {
+  RF24Network *network_;
+  RF24NetworkHeader lastHeader;
+ public:
+  void begin(RF24Network &network);
+  uint8_t receiveMessage(MessageHelper * message);
+  uint8_t updateNetwork();
+  bool networkAvailable();
+  bool sendMessage(Sensor *fromSensor,
+                   Sensor *toSensor,
+                   MessageHelper const *message);
+};
+
+class SensorManager {
+  //use vector
+  Sensor *sensorOnThisArduino[MAX_SENSOR_PER_ARDUINO];
+  MessageHelper message_;
+
+ public:
+  bool addSensor(Sensor * sensor);
+  bool sensorsHasToSend();
+  MessageHelper *getMessage();
+  void prepareMessages();
+
+  Sensor *getSensors(uint8_t index);
+  uint8_t getSensorsNum();
 };
 
 
 
-class LightRelaySensor : public Sensor {
+class RelaySensor : public Sensor {
   // In future a vector will be used for the moment 5 sensor per recevier is hardcoded
   Sensor* sensormap[5];
   /*
@@ -181,12 +221,13 @@ class LightRelaySensor : public Sensor {
    */
  public:
 
-  LightRelaySensor(uint16_t const address,
-                   uint8_t const id,
-                   Leds *leds);
-
+  RelaySensor(uint16_t const address,
+                   uint8_t const id);
+  bool prepareDataMessageToSend();
+  bool update();
  private:
-  bool sensorPresentationReceived();
+  bool sensorChildrenPresentationReceived();
+  bool sensorParentPresentationReceived();
   bool setSensorInfo();
   bool getSensorInfo();
   bool systemFuncion();
@@ -197,30 +238,12 @@ class LightRelaySensor : public Sensor {
 class MotionSensor : public Sensor {
  public:
   MotionSensor(uint16_t const address,
-               uint8_t const id,
-               Leds *leds);
+               uint8_t const id);
+  bool prepareDataMessageToSend();
+  bool update();
  private:
-    bool sensorPresentationReceived();
-    bool setSensorInfo();
-    bool getSensorInfo();
-    bool systemFuncion();
-    bool incomingDataIsAStream();
-
-};
-
-
-
-
-
-class LightSensor : public Sensor {
- public:
-  LightSensor(uint16_t const address,
-              uint8_t const id,
-              SensorMessageHelper *sensorMessageHelper,
-              Leds *leds);
-
- private:
-  bool sensorPresentationReceived();
+  bool sensorChildrenPresentationReceived();
+  bool sensorParentPresentationReceived();
   bool setSensorInfo();
   bool getSensorInfo();
   bool systemFuncion();
@@ -228,14 +251,15 @@ class LightSensor : public Sensor {
 
 };
 
-class ReceiverListSensor : public Sensor {
+class LightLevelSensor : public Sensor {
  public:
-  ReceiverListSensor(uint16_t const address,
-              uint8_t const id,
-              Leds *leds);
-
+  LightLevelSensor(uint16_t const address,
+              uint8_t const id);
+  bool prepareDataMessageToSend();
+  bool update();
  private:
-  bool sensorPresentationReceived();
+  bool sensorChildrenPresentationReceived();
+  bool sensorParentPresentationReceived();
   bool setSensorInfo();
   bool getSensorInfo();
   bool systemFuncion();
