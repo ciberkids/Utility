@@ -224,7 +224,7 @@ void Sensor::setMessageHasToSend() {
 
 void Sensor::evaluateMessage(MessageHelper *message) {
 
-  switch (getMessage()->getCommand()) {
+  switch (message->getCommand()) {
     case C_PRESENTATION_CHILDREN:
       sensorChildrenPresentationReceived(message); //register the sensor if necessary
       break;
@@ -286,8 +286,8 @@ bool RelaySensor::sensorParentPresentationReceived(MessageHelper *message) {
 
 
 bool RelaySensor::sensorChildrenPresentationReceived(MessageHelper *message) {
-  if(sensormap[getMessage()->getSensorID()] == NULL) {
-    sensormap[getMessage()->getSensorID()] = Sensor::getSensorObj(message);
+  if(sensormap[message->getSensorID()] == NULL) {
+    sensormap[message->getSensorID()] = Sensor::getSensorObj(message);
   }
   return true;
 }
